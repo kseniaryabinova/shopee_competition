@@ -1,0 +1,13 @@
+dataset
+shopee_env
+.ipynb_checkpoints
+.idea
+__pycache__
+*.pth
+*.csv
+checkpoints
+tensorboard_runs
+pip_packages.txt
+*.zip
+r_env
+
