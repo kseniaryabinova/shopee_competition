@@ -11,7 +11,7 @@ class ImageDataset(Dataset):
         self.df = df
         self.dir_path = dir_path
         self.transform = transform
-        self.classes = self.df['label_group'].unique()
+        self.classes = self.df['label_group'].unique().tolist()
 
     def __len__(self):
         return len(self.df)
@@ -24,7 +24,7 @@ class ImageDataset(Dataset):
         if self.transform:
             image = self.transform(image=image)['image']
 
-        label = (self.classes == self.df.iloc[index]['label_group']).astype(int)
+        label = self.classes.index(self.df.iloc[index]['label_group'])
 
         return image, label
 
@@ -44,4 +44,3 @@ if __name__ == '__main__':
         cv2.imshow('df', img)
         if cv2.waitKey(0) == 27:
             break
-
