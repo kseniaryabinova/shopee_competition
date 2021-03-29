@@ -14,10 +14,15 @@ import wandb
 
 from dataset import ImageDataset
 from model import EfficientNetArcFace
+from train_functions import train_one_epoch
 
 os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':64:8'
 
 wandb.init(project='shopee_effnet0', group=wandb.util.generate_id())
+
+checkpoints_dir_name = 'effnet0'
+os.makedirs(checkpoints_dir_name, exist_ok=True)
+wandb.config.model_name = checkpoints_dir_name
 
 batch_size = 32
 width_size = 128
@@ -54,17 +59,11 @@ optimizer.zero_grad()
 train_loss = 0
 
 for epoch in range(n_epochs):
-    for images, labels in dataloader:
-        outputs = model(images.cuda(), labels.cuda())
+    train_loss, train_duration = train_one_epoch(model, dataloader, optimizer, criterion)
 
-        loss = criterion(outputs, labels.cuda())
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+    wandb.log({'train_loss': train_loss, 'epoch': epoch})
 
-        train_loss += loss.item()
-        print(loss.item())
+    torch.save(model.state_dict(),
+               os.path.join(checkpoints_dir_name, '{}_train_loss{}.pth'.format(checkpoints_dir_name, train_loss)))
 
-    train_loss /= len(list(iter(dataloader)))
-
-
+wandb.finish()
