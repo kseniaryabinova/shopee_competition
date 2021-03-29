@@ -17,6 +17,8 @@ from model import EfficientNetArcFace
 from train_functions import train_one_epoch
 
 os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':64:8'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['WANDB_SILENT'] = 'true'
 
 wandb.init(project='shopee_effnet0', group=wandb.util.generate_id())
 

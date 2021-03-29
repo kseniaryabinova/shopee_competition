@@ -9,7 +9,7 @@ opencv_python == 4.5.1.48
 
 # train_scripts/dataset.py: 33
 # train_scripts/image_train_loop.py: 2
-pandas == 1.2.3
+# pandas >= 1.2.3
 
 # train_scripts/model.py: 9
 timm == 0.4.5
