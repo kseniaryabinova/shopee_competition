@@ -10,4 +10,6 @@ tensorboard_runs
 pip_packages.txt
 *.zip
 r_env
+*.npz
+embeddings
 
