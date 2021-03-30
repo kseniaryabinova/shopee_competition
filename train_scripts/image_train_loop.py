@@ -1,3 +1,5 @@
+from pytz import timezone
+from datetime import datetime
 import os
 import pandas as pd
 
@@ -58,14 +60,15 @@ scheduler = lr_scheduler.CosineAnnealingLR(optimizer, n_epochs)
 model.train()
 optimizer.zero_grad()
 
-train_loss = 0
-
 for epoch in range(n_epochs):
-    train_loss, train_duration = train_one_epoch(model, dataloader, optimizer, criterion)
+    train_loss, train_duration, f1 = train_one_epoch(model, dataloader, optimizer, criterion)
 
     wandb.log({'train_loss': train_loss, 'epoch': epoch})
 
+    print('EPOCH %d:\tTRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t\tCurrent time %s' %
+          (epoch + 1, train_duration, train_loss, f1, str(datetime.now(timezone('Europe/Moscow')))))
     torch.save(model.state_dict(),
-               os.path.join(checkpoints_dir_name, '{}_train_loss{}.pth'.format(checkpoints_dir_name, train_loss)))
+               os.path.join(checkpoints_dir_name, '{}_epoch{}_loss{}_f1{}.pth'.format(
+                   checkpoints_dir_name, epoch, train_loss, f1)))
 
 wandb.finish()
