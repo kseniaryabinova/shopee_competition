@@ -30,8 +30,8 @@ wandb.config.model_name = checkpoints_dir_name
 
 batch_size = 32
 width_size = 128
-init_lr = 1e-3
-n_epochs = 10
+init_lr = 1e-4
+n_epochs = 20
 emb_size = 512
 margin = 0.5
 wandb.config.batch_size = batch_size

@@ -8,6 +8,7 @@ from cuml.neighbors import NearestNeighbors
 print('Computing text embeddings...')
 
 cpu_df = pd.read_csv('train.csv')
+cpu_df = pd.concat([cpu_df, cpu_df], axis=0)
 df = cudf.DataFrame(cpu_df)
 
 # model = TfidfVectorizer(stop_words=None,
@@ -48,6 +49,7 @@ df = cudf.DataFrame(cpu_df)
 
 
 image_embeddings = np.load('embs0.npz')['embeddings']
+image_embeddings = np.concatenate([image_embeddings, image_embeddings], axis=0)
 print('text embeddings shape', image_embeddings.shape)
 
 KNN = 50
@@ -59,7 +61,7 @@ model.fit(image_embeddings)
 image_embeddings = cupy.array(image_embeddings)
 preds = []
 CHUNK = 1024 * 4
-THRESHOLD = 0.5
+THRESHOLD = 1
 
 print('Finding similar images...')
 CTS = len(image_embeddings) // CHUNK
@@ -77,6 +79,8 @@ for j in range(CTS):
 
     for k in range(b - a):
         IDX = cupy.where(cts[k,] > THRESHOLD)[0]
-        o = cpu_df.iloc[cupy.asnumpy(IDX)].posting_id.values
+        IDX = cupy.asnumpy(IDX)
+        o = cpu_df.iloc[IDX].posting_id.values
         preds.append(o)
 
+print(len(preds))

@@ -1,5 +1,6 @@
 import time
 
+import numpy as np
 from torch import nn
 from sklearn.metrics import f1_score
 
@@ -10,7 +11,7 @@ def train_one_epoch(model: nn.Module, dataloader, optimizer, criterion):
     iter_counter = 0
     predictions = []
     targets = []
-    softmax = nn.Softmax()
+    softmax = nn.Softmax(dim=1)
 
     model.train()
     optimizer.zero_grad()
@@ -18,7 +19,9 @@ def train_one_epoch(model: nn.Module, dataloader, optimizer, criterion):
     for images, labels in dataloader:
         outputs = model(images.cuda(), labels.cuda())
 
-        predictions.extend(softmax(outputs).detach().tolist())
+        prediction = softmax(outputs).cpu().detach().numpy()
+        prediction = np.argmax(prediction, axis=1)
+        predictions.extend(prediction.tolist())
         targets.extend(labels.tolist())
 
         loss = criterion(outputs, labels.cuda())
