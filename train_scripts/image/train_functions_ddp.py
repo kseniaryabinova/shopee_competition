@@ -1,0 +1,104 @@
+import os
+from pytz import timezone
+from datetime import datetime
+
+import numpy as np
+import pandas as pd
+
+import albumentations as alb
+from albumentations.pytorch import ToTensorV2
+
+from torch import optim
+from torch.cuda.amp import GradScaler
+from torch.nn import CrossEntropyLoss, SyncBatchNorm
+from torch.nn.parallel import DistributedDataParallel
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.utils.data import DataLoader, DistributedSampler
+import torch.distributed as dist
+
+import wandb
+
+from dataset import ImageDataset
+from model import EfficientNetArcFace
+from train_functions import train_one_epoch
+
+
+def train_function(gpu, world_size, node_rank, gpus):
+    import torch.multiprocessing
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
+    torch.manual_seed(25)
+    np.random.seed(25)
+
+    rank = node_rank * gpus + gpu
+    dist.init_process_group(
+        backend='nccl',
+        init_method='env://',
+        world_size=world_size,
+        rank=rank
+    )
+
+    checkpoints_dir_name = 'effnet4'
+    os.makedirs(checkpoints_dir_name, exist_ok=True)
+
+    device = torch.device("cuda:{}".format(gpu) if torch.cuda.is_available() else "cpu")
+
+    batch_size = 128
+    width_size = 192
+    init_lr = 1e-4
+    end_lr = 1e-6
+    n_epochs = 20
+    emb_size = 512
+    margin = 0.5
+
+    if rank == 0:
+        wandb.init(project='shopee_effnet4', group=wandb.util.generate_id())
+
+        wandb.config.model_name = checkpoints_dir_name
+        wandb.config.batch_size = batch_size
+        wandb.config.width_size = width_size
+        wandb.config.init_lr = init_lr
+        wandb.config.n_epochs = n_epochs
+        wandb.config.emb_size = emb_size
+        wandb.config.optimizer = 'adam'
+        wandb.config.scheduler = 'CosineAnnealingLR'
+
+    df = pd.read_csv('../../dataset/train.csv')
+    transforms = alb.Compose([
+        alb.Resize(width_size, width_size),
+        alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        ToTensorV2()
+    ])
+    dataset = ImageDataset(df, '../../dataset/train_images', transforms)
+    sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size // world_size, shuffle=False, num_workers=4, sampler=sampler)
+
+    model = EfficientNetArcFace(emb_size, df['label_group'].nunique(), device, dropout=0.,
+                                backbone='tf_efficientnet_b4_ns', pretrained=True, margin=margin, is_amp=True)
+    model = SyncBatchNorm.convert_sync_batchnorm(model)
+    model.to(device)
+    model = DistributedDataParallel(model, device_ids=[gpu])
+
+    scaler = GradScaler()
+    criterion = CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=init_lr)
+    scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=end_lr, last_epoch=-1)
+
+    model.train()
+    optimizer.zero_grad()
+
+    for epoch in range(n_epochs):
+        train_loss, train_duration, f1 = train_one_epoch(model, dataloader, optimizer, criterion, device, scaler)
+        scheduler.step()
+
+        if rank == 0:
+            wandb.log({'train_loss': train_loss, 'f1': f1, 'epoch': epoch})
+
+            print('EPOCH %d:\tTRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t\tCurrent time %s' %
+                  (epoch + 1, train_duration, train_loss, f1, str(datetime.now(timezone('Europe/Moscow')))))
+            torch.save(model.module.state_dict(),
+                       os.path.join(checkpoints_dir_name, '{}_epoch{}_loss{}_f1{}.pth'.format(
+                           checkpoints_dir_name, epoch, train_loss, f1)))
+
+    if rank == 0:
+        wandb.finish()

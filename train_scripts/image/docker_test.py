@@ -5,10 +5,19 @@ import numpy as np
 from cuml.feature_extraction.text import TfidfVectorizer
 from cuml.neighbors import NearestNeighbors
 
+from sklearn.metrics import f1_score
+
 print('Computing text embeddings...')
 
-cpu_df = pd.read_csv('train.csv')
-cpu_df = pd.concat([cpu_df, cpu_df], axis=0)
+
+def get_embeddings_metric(df):
+    for i in range(len(df)):
+        df.loc[df.loc[i, 'preds'], 'pred_label'] = df.loc[i, 'label_group']
+    f1 = f1_score(df['label_group'], df['pred_label'], average='macro')
+    return f1
+
+
+cpu_df = pd.read_csv('image/train.csv')
 df = cudf.DataFrame(cpu_df)
 
 # model = TfidfVectorizer(stop_words=None,
@@ -47,9 +56,7 @@ df = cudf.DataFrame(cpu_df)
 #         preds.append(o)
 
 
-
-image_embeddings = np.load('embs0.npz')['embeddings']
-image_embeddings = np.concatenate([image_embeddings, image_embeddings], axis=0)
+image_embeddings = np.load('image/embs_effnet4.npz')['embeddings']
 print('text embeddings shape', image_embeddings.shape)
 
 KNN = 50
@@ -59,28 +66,32 @@ model = NearestNeighbors(n_neighbors=KNN)
 model.fit(image_embeddings)
 
 image_embeddings = cupy.array(image_embeddings)
-preds = []
-CHUNK = 1024 * 4
-THRESHOLD = 1
 
-print('Finding similar images...')
-CTS = len(image_embeddings) // CHUNK
-if len(image_embeddings) % CHUNK != 0:
-    CTS += 1
+for threshold in np.arange(0.5, 1.1, 0.1):
+    preds = []
+    CHUNK = 1024 * 4
 
-for j in range(CTS):
+    # print('Finding similar images...')
+    CTS = len(image_embeddings) // CHUNK
+    if len(image_embeddings) % CHUNK != 0:
+        CTS += 1
 
-    a = j * CHUNK
-    b = (j + 1) * CHUNK
-    b = min(b, len(image_embeddings))
-    print('chunk', a, 'to', b)
+    for j in range(CTS):
 
-    cts = cupy.matmul(image_embeddings, image_embeddings[a:b].T).T
+        a = j * CHUNK
+        b = (j + 1) * CHUNK
+        b = min(b, len(image_embeddings))
+        # print('chunk', a, 'to', b)
 
-    for k in range(b - a):
-        IDX = cupy.where(cts[k,] > THRESHOLD)[0]
-        IDX = cupy.asnumpy(IDX)
-        o = cpu_df.iloc[IDX].posting_id.values
-        preds.append(o)
+        cts = cupy.matmul(image_embeddings, image_embeddings[a:b].T).T
 
-print(len(preds))
+        for k in range(b - a):
+            IDX = cupy.where(cts[k, ] > threshold)[0]
+            IDX = cupy.asnumpy(IDX)
+            o = cpu_df.iloc[IDX].index.values
+            preds.append(o)
+        pass
+
+    cpu_df['preds'] = preds
+
+    print(threshold, get_embeddings_metric(cpu_df))

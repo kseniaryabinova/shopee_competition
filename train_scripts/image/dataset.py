@@ -32,12 +32,12 @@ class ImageDataset(Dataset):
 if __name__ == '__main__':
     import pandas as pd
 
-    df = pd.read_csv('../dataset/train.csv')
+    df = pd.read_csv('../../dataset/train.csv')
     transforms = alb.Compose([
         alb.Resize(128, 128),
     ])
 
-    dataset = ImageDataset(df, '../dataset/train_images', transforms)
+    dataset = ImageDataset(df, '../../dataset/train_images', transforms)
 
     for i in range(10):
         img, _ = dataset[i]

@@ -9,7 +9,7 @@ from albumentations.pytorch import ToTensorV2
 
 from torch import optim
 from torch.nn import CrossEntropyLoss
-from torch.optim import lr_scheduler
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 
 import wandb
@@ -29,8 +29,9 @@ os.makedirs(checkpoints_dir_name, exist_ok=True)
 wandb.config.model_name = checkpoints_dir_name
 
 batch_size = 32
-width_size = 128
+width_size = 192
 init_lr = 1e-4
+end_lr = 1e-6
 n_epochs = 20
 emb_size = 512
 margin = 0.5
@@ -39,14 +40,16 @@ wandb.config.width_size = width_size
 wandb.config.init_lr = init_lr
 wandb.config.n_epochs = n_epochs
 wandb.config.emb_size = emb_size
+wandb.config.optimizer = 'adam'
+wandb.config.scheduler = 'CosineAnnealingLR'
 
-df = pd.read_csv('../dataset/train.csv')
+df = pd.read_csv('../../dataset/train.csv')
 transforms = alb.Compose([
     alb.Resize(width_size, width_size),
     alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
     ToTensorV2()
 ])
-dataset = ImageDataset(df, '../dataset/train_images', transforms)
+dataset = ImageDataset(df, '../../dataset/train_images', transforms)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True)
 
 model = EfficientNetArcFace(emb_size, df['label_group'].nunique(), backbone='tf_efficientnet_b0_ns',
@@ -55,15 +58,16 @@ model.cuda()
 
 criterion = CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=init_lr)
-scheduler = lr_scheduler.CosineAnnealingLR(optimizer, n_epochs)
+scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=end_lr, last_epoch=-1)
 
 model.train()
 optimizer.zero_grad()
 
 for epoch in range(n_epochs):
     train_loss, train_duration, f1 = train_one_epoch(model, dataloader, optimizer, criterion)
+    scheduler.step()
 
-    wandb.log({'train_loss': train_loss, 'epoch': epoch})
+    wandb.log({'train_loss': train_loss, 'f1': f1, 'epoch': epoch})
 
     print('EPOCH %d:\tTRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t\tCurrent time %s' %
           (epoch + 1, train_duration, train_loss, f1, str(datetime.now(timezone('Europe/Moscow')))))
