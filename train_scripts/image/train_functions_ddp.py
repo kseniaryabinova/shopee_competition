@@ -103,16 +103,20 @@ def train_function(gpu, world_size, node_rank, gpus):
         scheduler.step()
 
         if rank == 0:
-            valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device, scaler)
+            print('start eval')
+            valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device)
 
             wandb.log({'train_loss': train_loss, 'train_f1': train_f1,
                        'valid_loss': valid_loss, 'valid_f1': valid_f1, 'epoch': epoch})
 
-            print('EPOCH %d:\tTRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t\tCurrent time %s' %
-                  (epoch + 1, train_duration, train_loss, train_f1, str(datetime.now(timezone('Europe/Moscow')))))
+            print('EPOCH %d:\tTRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t\t'
+                  'VALID [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t\tCurrent time %s' %
+                  (epoch + 1, train_duration, train_loss, train_f1, valid_duration, valid_loss, valid_f1,
+                   str(datetime.now(timezone('Europe/Moscow')))))
             torch.save(model.module.state_dict(),
-                       os.path.join(checkpoints_dir_name, '{}_epoch{}_loss{}_f1{}.pth'.format(
-                           checkpoints_dir_name, epoch, train_loss, train_f1)))
+                       os.path.join(checkpoints_dir_name, '{}_epoch{}_train_loss{}_f1{}_valid_loss{}_f1().pth'.format(
+                           checkpoints_dir_name, epoch, round(train_loss, 3), round(train_f1, 3),
+                           round(valid_loss, 3), round(valid_f1, 3))))
 
     if rank == 0:
         wandb.finish()

@@ -55,7 +55,7 @@ def get_metric(predictions, targets):
     return f1
 
 
-def evaluate(model: nn.Module, dataloader, criterion, device, scaler):
+def evaluate(model: nn.Module, dataloader, criterion, device):
     total_loss = 0
     start_time = time.time()
     iter_counter = 0
@@ -64,14 +64,12 @@ def evaluate(model: nn.Module, dataloader, criterion, device, scaler):
     softmax = nn.Softmax(dim=1)
 
     model.eval()
+    model.float()
 
-    with torch.to_grad():
+    with torch.no_grad():
         for i, (images, labels) in enumerate(dataloader):
-            if scaler is not None:
-                with autocast():
-                    outputs = model(images.to(device), labels.to(device))
-                    loss = criterion(outputs, labels.to(device))
-                scaler.scale(loss).backward()
+            outputs = model(images.to(device), labels.to(device))
+            loss = criterion(outputs, labels.to(device))
 
             prediction = softmax(outputs).cpu().detach().numpy()
             prediction = np.argmax(prediction, axis=1)
@@ -81,6 +79,9 @@ def evaluate(model: nn.Module, dataloader, criterion, device, scaler):
             total_loss += loss.item()
             iter_counter += 1
 
+            print(i)
+
+    print('done')
     total_loss /= iter_counter
     f1 = get_metric(predictions, targets)
 
