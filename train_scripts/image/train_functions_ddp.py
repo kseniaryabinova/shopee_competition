@@ -38,18 +38,19 @@ def train_function(gpu, world_size, node_rank, gpus):
         rank=rank
     )
 
-    checkpoints_dir_name = 'effnet4'
-    os.makedirs(checkpoints_dir_name, exist_ok=True)
-
     device = torch.device("cuda:{}".format(gpu) if torch.cuda.is_available() else "cpu")
 
-    batch_size = 128
-    width_size = 192
+    batch_size = 64
+    width_size = 416
     init_lr = 1e-4
     end_lr = 1e-6
     n_epochs = 20
     emb_size = 512
     margin = 0.5
+    dropout = 0.5
+
+    checkpoints_dir_name = 'effnet4_{}_{}'.format(width_size, dropout)
+    os.makedirs(checkpoints_dir_name, exist_ok=True)
 
     if rank == 0:
         wandb.init(project='shopee_effnet4', group=wandb.util.generate_id())
@@ -60,10 +61,11 @@ def train_function(gpu, world_size, node_rank, gpus):
         wandb.config.init_lr = init_lr
         wandb.config.n_epochs = n_epochs
         wandb.config.emb_size = emb_size
+        wandb.config.dropout = dropout
         wandb.config.optimizer = 'adam'
         wandb.config.scheduler = 'CosineAnnealingLR'
 
-    df = pd.read_csv('../../dataset/train_strat_kfold.csv')
+    df = pd.read_csv('../../dataset/train.csv')
     train_df = df[df['fold'] != 0]
     transforms = alb.Compose([
         alb.Resize(width_size, width_size),
@@ -82,9 +84,9 @@ def train_function(gpu, world_size, node_rank, gpus):
         ToTensorV2()
     ])
     valid_set = ImageDataset(valid_df, '../../dataset/train_images', transforms)
-    valid_dataloader = DataLoader(valid_set, batch_size=batch_size, shuffle=False, num_workers=4)
+    valid_dataloader = DataLoader(valid_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4)
 
-    model = EfficientNetArcFace(emb_size, df['label_group'].nunique(), device, dropout=0.,
+    model = EfficientNetArcFace(emb_size, df['label_group'].nunique(), device, dropout=dropout,
                                 backbone='tf_efficientnet_b4_ns', pretrained=True, margin=margin, is_amp=True)
     model = SyncBatchNorm.convert_sync_batchnorm(model)
     model.to(device)
@@ -99,11 +101,11 @@ def train_function(gpu, world_size, node_rank, gpus):
     optimizer.zero_grad()
 
     for epoch in range(n_epochs):
-        train_loss, train_duration, train_f1 = train_one_epoch(model, train_dataloader, optimizer, criterion, device, scaler)
+        train_loss, train_duration, train_f1 = train_one_epoch(model, train_dataloader, optimizer, criterion, device,
+                                                               scaler, iters_to_accumulate=2)
         scheduler.step()
 
         if rank == 0:
-            print('start eval')
             valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device)
 
             wandb.log({'train_loss': train_loss, 'train_f1': train_f1,

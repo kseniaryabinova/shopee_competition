@@ -29,7 +29,7 @@ os.makedirs(checkpoints_dir_name, exist_ok=True)
 wandb.config.model_name = checkpoints_dir_name
 
 batch_size = 32
-width_size = 192
+width_size = 416
 init_lr = 1e-4
 end_lr = 1e-6
 n_epochs = 20

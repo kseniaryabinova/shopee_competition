@@ -79,9 +79,6 @@ def evaluate(model: nn.Module, dataloader, criterion, device):
             total_loss += loss.item()
             iter_counter += 1
 
-            print(i)
-
-    print('done')
     total_loss /= iter_counter
     f1 = get_metric(predictions, targets)
 
