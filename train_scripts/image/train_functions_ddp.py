@@ -47,7 +47,8 @@ def train_function(gpu, world_size, node_rank, gpus):
     n_epochs = 20
     emb_size = 512
     margin = 0.5
-    dropout = 0.5
+    dropout = 0.0
+    iters_to_accumulate = 10
 
     checkpoints_dir_name = 'effnet4_{}_{}'.format(width_size, dropout)
     os.makedirs(checkpoints_dir_name, exist_ok=True)
@@ -62,12 +63,17 @@ def train_function(gpu, world_size, node_rank, gpus):
         wandb.config.n_epochs = n_epochs
         wandb.config.emb_size = emb_size
         wandb.config.dropout = dropout
+        wandb.config.iters_to_accumulate = iters_to_accumulate
         wandb.config.optimizer = 'adam'
         wandb.config.scheduler = 'CosineAnnealingLR'
 
-    df = pd.read_csv('../../dataset/fold.csv')
+    df = pd.read_csv('../../dataset/folds.csv')
     train_df = df[df['fold'] != 0]
     transforms = alb.Compose([
+        # alb.RandomResizedCrop(width_size, width_size),
+        # alb.HorizontalFlip(),
+        # alb.ShiftScaleRotate(shift_limit=0.1, rotate_limit=30),
+        # alb.CoarseDropout(max_height=int(width_size*0.1), max_width=int(width_size*0.1)),
         alb.Resize(width_size, width_size),
         alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
@@ -102,7 +108,7 @@ def train_function(gpu, world_size, node_rank, gpus):
 
     for epoch in range(n_epochs):
         train_loss, train_duration, train_f1 = train_one_epoch(model, train_dataloader, optimizer, criterion, device,
-                                                               scaler, iters_to_accumulate=2)
+                                                               scaler, iters_to_accumulate=iters_to_accumulate)
         scheduler.step()
 
         if rank == 0:

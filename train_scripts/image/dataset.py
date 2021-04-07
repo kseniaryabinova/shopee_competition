@@ -24,7 +24,7 @@ class ImageDataset(Dataset):
         if self.transform:
             image = self.transform(image=image)['image']
 
-        label = self.classes.index(self.df.iloc[index]['label_group'])
+        label = self.df.iloc[index]['label_group']
 
         return image, label
 
