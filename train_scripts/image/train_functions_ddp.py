@@ -65,7 +65,7 @@ def train_function(gpu, world_size, node_rank, gpus):
         wandb.config.optimizer = 'adam'
         wandb.config.scheduler = 'CosineAnnealingLR'
 
-    df = pd.read_csv('../../dataset/train.csv')
+    df = pd.read_csv('../../dataset/fold.csv')
     train_df = df[df['fold'] != 0]
     transforms = alb.Compose([
         alb.Resize(width_size, width_size),
