@@ -20,7 +20,7 @@ import wandb
 
 from dataset import ImageDataset
 from model import EfficientNetArcFace
-from train_functions import train_one_epoch, evaluate
+from train_functions import train_one_epoch, evaluate, get_embeddings
 
 
 def train_function(gpu, world_size, node_rank, gpus):
@@ -113,6 +113,7 @@ def train_function(gpu, world_size, node_rank, gpus):
 
         if rank == 0:
             valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device)
+            embeddings = get_embeddings(model, valid_dataloader, device)
 
             wandb.log({'train_loss': train_loss, 'train_f1': train_f1,
                        'valid_loss': valid_loss, 'valid_f1': valid_f1, 'epoch': epoch})
@@ -121,10 +122,11 @@ def train_function(gpu, world_size, node_rank, gpus):
                   'VALID [duration %.3f sec, loss: %.3f, avg f1: %.3f]\tCurrent time %s' %
                   (epoch + 1, train_duration, train_loss, train_f1, valid_duration, valid_loss, valid_f1,
                    str(datetime.now(timezone('Europe/Moscow')))))
-            torch.save(model.module.state_dict(),
-                       os.path.join(checkpoints_dir_name, '{}_epoch{}_train_loss{}_f1{}_valid_loss{}_f1().pth'.format(
+            filename = '{}_epoch{}_train_loss{}_f1{}_valid_loss{}_f1()'.format(
                            checkpoints_dir_name, epoch, round(train_loss, 3), round(train_f1, 3),
-                           round(valid_loss, 3), round(valid_f1, 3))))
+                           round(valid_loss, 3), round(valid_f1, 3))
+            torch.save(model.module.state_dict(), os.path.join(checkpoints_dir_name, '{}.pth'.format(filename)))
+            np.savez_compressed('{}.npz'.format(filename), embeddings=embeddings)
 
     if rank == 0:
         wandb.finish()

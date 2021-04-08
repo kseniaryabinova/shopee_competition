@@ -84,3 +84,20 @@ def evaluate(model: nn.Module, dataloader, criterion, device):
 
     return total_loss, time.time() - start_time, f1
 
+
+def get_embeddings(model: nn.Module, dataloader, device):
+    model.eval()
+    model.float()
+    embeddings = None
+
+    with torch.no_grad():
+        for images, labels in dataloader:
+            outputs = model(images.to(device))
+
+            if embeddings is None:
+                embeddings = outputs.cpu().detach().numpy()
+            else:
+                embeddings = np.concatenate([embeddings, outputs.cpu().detach().numpy()], axis=0)
+
+    return embeddings
+
