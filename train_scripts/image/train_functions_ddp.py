@@ -78,7 +78,7 @@ def train_function(gpu, world_size, node_rank, gpus):
         alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ])
-    train_set = ImageDataset(train_df, '../../dataset/train_images', transforms)
+    train_set = ImageDataset(df, train_df, '../../dataset/train_images', transforms)
     sampler = DistributedSampler(train_set, num_replicas=world_size, rank=rank, shuffle=True)
     train_dataloader = DataLoader(train_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4,
                                   sampler=sampler)
@@ -89,7 +89,7 @@ def train_function(gpu, world_size, node_rank, gpus):
         alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ])
-    valid_set = ImageDataset(valid_df, '../../dataset/train_images', transforms)
+    valid_set = ImageDataset(df, valid_df, '../../dataset/train_images', transforms)
     valid_dataloader = DataLoader(valid_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4)
 
     model = EfficientNetArcFace(emb_size, df['label_group'].nunique(), device, dropout=dropout,

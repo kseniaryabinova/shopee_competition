@@ -7,11 +7,11 @@ import albumentations as alb
 
 
 class ImageDataset(Dataset):
-    def __init__(self, df, dir_path, transform):
+    def __init__(self, full_df, df, dir_path, transform):
         self.df = df
         self.dir_path = dir_path
         self.transform = transform
-        self.classes = self.df['label_group'].unique().tolist()
+        self.classes = full_df['label_group'].unique().tolist()
 
     def __len__(self):
         return len(self.df)
@@ -24,7 +24,7 @@ class ImageDataset(Dataset):
         if self.transform:
             image = self.transform(image=image)['image']
 
-        label = self.df.iloc[index]['label_group']
+        label = self.classes.index(self.df.iloc[index]['label_group'])
 
         return image, label
 

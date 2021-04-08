@@ -17,32 +17,36 @@ import wandb
 
 from dataset import ImageDataset
 from model import EfficientNetArcFace
-from train_functions import train_one_epoch
+from train_functions import train_one_epoch, evaluate
 
 os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':64:8'
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
 os.environ['WANDB_SILENT'] = 'true'
 
 wandb.init(project='shopee_effnet0', group=wandb.util.generate_id())
 
-checkpoints_dir_name = 'effnet0'
-os.makedirs(checkpoints_dir_name, exist_ok=True)
-wandb.config.model_name = checkpoints_dir_name
-
-batch_size = 32
+batch_size = 64
 width_size = 416
 init_lr = 1e-4
 end_lr = 1e-6
 n_epochs = 20
 emb_size = 512
 margin = 0.5
+dropout = 0.0
+iters_to_accumulate = 10
 wandb.config.batch_size = batch_size
 wandb.config.width_size = width_size
 wandb.config.init_lr = init_lr
 wandb.config.n_epochs = n_epochs
 wandb.config.emb_size = emb_size
+wandb.config.dropout = dropout
+wandb.config.iters_to_accumulate = iters_to_accumulate
 wandb.config.optimizer = 'adam'
 wandb.config.scheduler = 'CosineAnnealingLR'
+
+checkpoints_dir_name = 'effnet4_{}_{}'.format(width_size, dropout)
+os.makedirs(checkpoints_dir_name, exist_ok=True)
+wandb.config.model_name = checkpoints_dir_name
 
 df = pd.read_csv('../../dataset/folds.csv')
 train_df = df[df['fold'] != 0]
@@ -63,10 +67,10 @@ transforms = alb.Compose([
 valid_set = ImageDataset(valid_df, '../../dataset/train_images', transforms)
 valid_dataloader = DataLoader(valid_set, batch_size=batch_size, shuffle=False, num_workers=4)
 
-
-model = EfficientNetArcFace(emb_size, df['label_group'].nunique(), backbone='tf_efficientnet_b0_ns',
-                            pretrained=True, margin=margin)
-model.cuda()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = EfficientNetArcFace(emb_size, df['label_group'].nunique(), device, dropout=dropout,
+                            backbone='tf_efficientnet_b4_ns', pretrained=True, margin=margin, is_amp=True)
+model.to(device)
 
 scaler = GradScaler()
 model = DataParallel(model)
@@ -82,7 +86,7 @@ for epoch in range(n_epochs):
                                                            scaler, iters_to_accumulate=iters_to_accumulate)
     scheduler.step()
 
-    valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device)
+    # valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device)
 
     wandb.log({'train_loss': train_loss, 'train_f1': train_f1,
                'valid_loss': valid_loss, 'valid_f1': valid_f1, 'epoch': epoch})

@@ -44,7 +44,7 @@ def train_one_epoch(model: nn.Module, dataloader, optimizer, criterion, device, 
         total_loss += loss.item()
         iter_counter += 1
 
-    total_loss /= iter_counter
+    total_loss /= iter_counter / iters_to_accumulate
     f1 = get_metric(predictions, targets)
 
     return total_loss, time.time() - start_time, f1
