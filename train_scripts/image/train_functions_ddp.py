@@ -50,11 +50,12 @@ def train_function(gpu, world_size, node_rank, gpus):
     dropout = 0.0
     iters_to_accumulate = 1
 
-    checkpoints_dir_name = 'effnet0_{}_{}'.format(width_size, dropout)
-    os.makedirs(checkpoints_dir_name, exist_ok=True)
-
     if rank == 0:
-        wandb.init(project='shopee_effnet0', group=wandb.util.generate_id())
+        group_name = wandb.util.generate_id()
+        wandb.init(project='shopee_effnet0', group=group_name)
+
+        checkpoints_dir_name = 'effnet0_{}_{}_{}'.format(width_size, dropout, group_name)
+        os.makedirs(checkpoints_dir_name, exist_ok=True)
 
         wandb.config.model_name = checkpoints_dir_name
         wandb.config.batch_size = batch_size
@@ -67,9 +68,9 @@ def train_function(gpu, world_size, node_rank, gpus):
         wandb.config.optimizer = 'adam'
         wandb.config.scheduler = 'CosineAnnealingLR'
 
-    df = pd.read_csv('../../dataset/folds.csv')
-    train_df = df[df['fold'] != 0]
-    transforms = alb.Compose([
+    df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
+    train_df = df[(df['fold_strat'] != 0) & ~(df['fold_strat'].isna())]
+    train_transforms = alb.Compose([
         alb.RandomResizedCrop(width_size, width_size),
         alb.HorizontalFlip(),
         alb.ShiftScaleRotate(shift_limit=0.1, rotate_limit=30),
@@ -78,21 +79,25 @@ def train_function(gpu, world_size, node_rank, gpus):
         alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ])
-    train_set = ImageDataset(df, train_df, '../../dataset/train_images', transforms)
+    train_set = ImageDataset(train_df, train_df, '../../dataset/train_images', train_transforms)
     sampler = DistributedSampler(train_set, num_replicas=world_size, rank=rank, shuffle=True)
     train_dataloader = DataLoader(train_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4,
                                   sampler=sampler)
 
-    valid_df = df[df['fold'] == 0]
-    transforms = alb.Compose([
+    valid_df = df[df['fold_strat'] == 0]
+    valid_transforms = alb.Compose([
         alb.Resize(width_size, width_size),
         alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ])
-    valid_set = ImageDataset(df, valid_df, '../../dataset/train_images', transforms)
+    valid_set = ImageDataset(train_df, valid_df, '../../dataset/train_images', valid_transforms)
     valid_dataloader = DataLoader(valid_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4)
 
-    model = EfficientNetArcFace(emb_size, df['label_group'].nunique(), device, dropout=dropout,
+    test_df = df[df['fold_group'] == 0]
+    test_set = ImageDataset(test_df, test_df, '../../dataset/train_images', valid_transforms)
+    test_dataloader = DataLoader(test_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4)
+
+    model = EfficientNetArcFace(emb_size, train_df['label_group'].nunique(), device, dropout=dropout,
                                 backbone='tf_efficientnet_b0_ns', pretrained=True, margin=margin, is_amp=True)
     model = SyncBatchNorm.convert_sync_batchnorm(model)
     model.to(device)
@@ -113,20 +118,21 @@ def train_function(gpu, world_size, node_rank, gpus):
 
         if rank == 0:
             valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device)
-            embeddings = get_embeddings(model, valid_dataloader, device)
+            embeddings = get_embeddings(model, test_dataloader, device)
 
             wandb.log({'train_loss': train_loss, 'train_f1': train_f1,
                        'valid_loss': valid_loss, 'valid_f1': valid_f1, 'epoch': epoch})
+
+            filename = '{}_epoch{}_train_loss{}_f1{}_valid_loss{}_f1{}'.format(
+                           checkpoints_dir_name, epoch, round(train_loss, 3), round(train_f1, 3),
+                           round(valid_loss, 3), round(valid_f1, 3))
+            torch.save(model.module.state_dict(), os.path.join(checkpoints_dir_name, '{}.pth'.format(filename)))
+            np.savez_compressed(os.path.join(checkpoints_dir_name, '{}.npz'.format(filename)), embeddings=embeddings)
 
             print('EPOCH %d:\tTRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t'
                   'VALID [duration %.3f sec, loss: %.3f, avg f1: %.3f]\tCurrent time %s' %
                   (epoch + 1, train_duration, train_loss, train_f1, valid_duration, valid_loss, valid_f1,
                    str(datetime.now(timezone('Europe/Moscow')))))
-            filename = '{}_epoch{}_train_loss{}_f1{}_valid_loss{}_f1()'.format(
-                           checkpoints_dir_name, epoch, round(train_loss, 3), round(train_f1, 3),
-                           round(valid_loss, 3), round(valid_f1, 3))
-            torch.save(model.module.state_dict(), os.path.join(checkpoints_dir_name, '{}.pth'.format(filename)))
-            np.savez_compressed('{}.npz'.format(filename), embeddings=embeddings)
 
     if rank == 0:
         wandb.finish()

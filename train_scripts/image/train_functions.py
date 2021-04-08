@@ -91,7 +91,7 @@ def get_embeddings(model: nn.Module, dataloader, device):
     embeddings = None
 
     with torch.no_grad():
-        for images, labels in dataloader:
+        for images, _ in dataloader:
             outputs = model(images.to(device))
 
             if embeddings is None:
