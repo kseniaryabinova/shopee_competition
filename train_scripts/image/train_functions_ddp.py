@@ -48,13 +48,13 @@ def train_function(gpu, world_size, node_rank, gpus):
     emb_size = 512
     margin = 0.5
     dropout = 0.0
-    iters_to_accumulate = 10
+    iters_to_accumulate = 1
 
-    checkpoints_dir_name = 'effnet4_{}_{}'.format(width_size, dropout)
+    checkpoints_dir_name = 'effnet0_{}_{}'.format(width_size, dropout)
     os.makedirs(checkpoints_dir_name, exist_ok=True)
 
     if rank == 0:
-        wandb.init(project='shopee_effnet4', group=wandb.util.generate_id())
+        wandb.init(project='shopee_effnet0', group=wandb.util.generate_id())
 
         wandb.config.model_name = checkpoints_dir_name
         wandb.config.batch_size = batch_size
@@ -70,10 +70,10 @@ def train_function(gpu, world_size, node_rank, gpus):
     df = pd.read_csv('../../dataset/folds.csv')
     train_df = df[df['fold'] != 0]
     transforms = alb.Compose([
-        # alb.RandomResizedCrop(width_size, width_size),
-        # alb.HorizontalFlip(),
-        # alb.ShiftScaleRotate(shift_limit=0.1, rotate_limit=30),
-        # alb.CoarseDropout(max_height=int(width_size*0.1), max_width=int(width_size*0.1)),
+        alb.RandomResizedCrop(width_size, width_size),
+        alb.HorizontalFlip(),
+        alb.ShiftScaleRotate(shift_limit=0.1, rotate_limit=30),
+        alb.CoarseDropout(max_height=int(width_size*0.1), max_width=int(width_size*0.1)),
         alb.Resize(width_size, width_size),
         alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
@@ -93,7 +93,7 @@ def train_function(gpu, world_size, node_rank, gpus):
     valid_dataloader = DataLoader(valid_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4)
 
     model = EfficientNetArcFace(emb_size, df['label_group'].nunique(), device, dropout=dropout,
-                                backbone='tf_efficientnet_b4_ns', pretrained=True, margin=margin, is_amp=True)
+                                backbone='tf_efficientnet_b0_ns', pretrained=True, margin=margin, is_amp=True)
     model = SyncBatchNorm.convert_sync_batchnorm(model)
     model.to(device)
     model = DistributedDataParallel(model, device_ids=[gpu])
@@ -117,8 +117,8 @@ def train_function(gpu, world_size, node_rank, gpus):
             wandb.log({'train_loss': train_loss, 'train_f1': train_f1,
                        'valid_loss': valid_loss, 'valid_f1': valid_f1, 'epoch': epoch})
 
-            print('EPOCH %d:\tTRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t\t'
-                  'VALID [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t\tCurrent time %s' %
+            print('EPOCH %d:\tTRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t'
+                  'VALID [duration %.3f sec, loss: %.3f, avg f1: %.3f]\tCurrent time %s' %
                   (epoch + 1, train_duration, train_loss, train_f1, valid_duration, valid_loss, valid_f1,
                    str(datetime.now(timezone('Europe/Moscow')))))
             torch.save(model.module.state_dict(),
