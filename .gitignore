@@ -12,4 +12,5 @@ pip_packages.txt
 r_env
 *.npz
 embeddings
+*.png
 
