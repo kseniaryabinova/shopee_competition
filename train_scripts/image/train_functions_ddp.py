@@ -40,15 +40,15 @@ def train_function(gpu, world_size, node_rank, gpus):
 
     device = torch.device("cuda:{}".format(gpu) if torch.cuda.is_available() else "cpu")
 
-    batch_size = 32
-    width_size = 640
+    batch_size = 64
+    width_size = 416
     init_lr = 1e-4
     end_lr = 1e-6
     n_epochs = 20
     emb_size = 512
     margin = 0.5
     dropout = 0.0
-    iters_to_accumulate = 2
+    iters_to_accumulate = 1
 
     if rank == 0:
         group_name = wandb.util.generate_id()
