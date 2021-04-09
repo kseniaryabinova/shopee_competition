@@ -1,7 +1,13 @@
+import glob
+import re
+
 import cudf
 import cupy
 import pandas as pd
 import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 from cuml.feature_extraction.text import TfidfVectorizer
 from cuml.neighbors import NearestNeighbors
 
@@ -17,8 +23,14 @@ def get_embeddings_metric(df):
     return f1
 
 
-cpu_df = pd.read_csv('image/train.csv')
+cpu_df = pd.read_csv('image/reliable_validation_tm.csv')
+cpu_df = cpu_df[cpu_df['fold_strat'].isna()]
+
+tmp = cpu_df.groupby('label_group').posting_id.agg('unique').to_dict()
+cpu_df['target'] = cpu_df.label_group.map(tmp)
+
 df = cudf.DataFrame(cpu_df)
+
 
 # model = TfidfVectorizer(stop_words=None,
 #                         binary=True,
@@ -56,18 +68,25 @@ df = cudf.DataFrame(cpu_df)
 #         preds.append(o)
 
 
-image_embeddings = np.load('image/embs_effnet4.npz')['embeddings']
-print('text embeddings shape', image_embeddings.shape)
+def get_metric(col):
+    def f1score(row):
+        n = len(np.intersect1d(row.target, row[col]))
+        return 2 * n / (len(row.target) + len(row[col]))
 
-KNN = 50
-if len(df) == 3:
-    KNN = 2
-model = NearestNeighbors(n_neighbors=KNN)
-model.fit(image_embeddings)
+    return f1score
 
-image_embeddings = cupy.array(image_embeddings)
 
-for threshold in np.arange(0.5, 1.1, 0.1):
+def get_preds(embs_path, threshold):
+    image_embeddings = np.load(embs_path)['embeddings']
+
+    KNN = 50
+    if len(df) == 3:
+        KNN = 2
+    model = NearestNeighbors(n_neighbors=KNN)
+    model.fit(image_embeddings)
+
+    image_embeddings = cupy.array(image_embeddings)
+
     preds = []
     CHUNK = 1024 * 4
 
@@ -81,17 +100,35 @@ for threshold in np.arange(0.5, 1.1, 0.1):
         a = j * CHUNK
         b = (j + 1) * CHUNK
         b = min(b, len(image_embeddings))
-        # print('chunk', a, 'to', b)
 
         cts = cupy.matmul(image_embeddings, image_embeddings[a:b].T).T
 
         for k in range(b - a):
             IDX = cupy.where(cts[k, ] > threshold)[0]
             IDX = cupy.asnumpy(IDX)
-            o = cpu_df.iloc[IDX].index.values
+            o = cpu_df.iloc[IDX].posting_id.values
             preds.append(o)
-        pass
 
-    cpu_df['preds'] = preds
+    return preds
 
-    print(threshold, get_embeddings_metric(cpu_df))
+
+r = re.compile(r'epoch(\d+)_')
+
+results = {}
+
+for i, embs_path in enumerate(sorted(glob.iglob('image/embs/*.npz'), key=lambda x: int(r.search(x).group(0).replace('epoch', '').replace('_', '')))):
+    print(embs_path)
+    results[i] = []
+
+    for thresh in np.arange(0.5, 1.001, 0.05):
+        predictions = get_preds(embs_path, thresh)
+        cpu_df['predictions'] = predictions
+
+        cpu_df['f1'] = cpu_df.apply(get_metric('predictions'), axis=1)
+        f1_mean = cpu_df['f1'].mean()
+        print('\tTH = {}\tCV score = {}'.format(round(thresh, 3), round(f1_mean, 5)))
+        results[i].append(f1_mean)
+
+result_df = pd.DataFrame(data=results, index=np.arange(0.5, 1.001, 0.05))
+sns.lineplot(data=result_df)
+plt.savefig('image/th_plot.png')
