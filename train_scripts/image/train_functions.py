@@ -6,6 +6,7 @@ from torch import nn
 from sklearn.metrics import f1_score
 from torch.cuda.amp import autocast
 from torch.nn.utils import clip_grad_norm_
+from torch.nn.functional import log_softmax
 
 
 def train_one_epoch(model: nn.Module, dataloader, optimizer, criterion, device, scaler, iters_to_accumulate=1,
@@ -101,3 +102,16 @@ def get_embeddings(model: nn.Module, dataloader, device):
 
     return embeddings
 
+
+class LabelSmoothLoss(nn.Module):
+    def __init__(self, smoothing=0.0):
+        super(LabelSmoothLoss, self).__init__()
+        self.smoothing = smoothing
+
+    def forward(self, input, target):
+        log_prob = log_softmax(input, dim=-1)
+        weight = input.new_ones(input.size()) * \
+                 self.smoothing / (input.size(-1) - 1.)
+        weight.scatter_(-1, target.unsqueeze(-1), (1. - self.smoothing))
+        loss = (-weight * log_prob).sum(dim=-1).mean()
+        return loss
