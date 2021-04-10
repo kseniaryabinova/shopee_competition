@@ -44,7 +44,7 @@ def train_function(gpu, world_size, node_rank, gpus):
     width_size = 416
     init_lr = 1e-4
     end_lr = 1e-6
-    n_epochs = 20
+    n_epochs = 40
     emb_size = 512
     margin = 0.5
     dropout = 0.0
@@ -52,9 +52,9 @@ def train_function(gpu, world_size, node_rank, gpus):
 
     if rank == 0:
         group_name = wandb.util.generate_id()
-        wandb.init(project='shopee_effnet4', group=group_name)
+        wandb.init(project='shopee_effnet0', group=group_name)
 
-        checkpoints_dir_name = 'effnet4_{}_{}_{}'.format(width_size, dropout, group_name)
+        checkpoints_dir_name = 'effnet0_{}_{}_{}'.format(width_size, dropout, group_name)
         os.makedirs(checkpoints_dir_name, exist_ok=True)
 
         wandb.config.model_name = checkpoints_dir_name
@@ -98,7 +98,7 @@ def train_function(gpu, world_size, node_rank, gpus):
     test_dataloader = DataLoader(test_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4)
 
     model = EfficientNetArcFace(emb_size, train_df['label_group'].nunique(), device, dropout=dropout,
-                                backbone='tf_efficientnet_b4_ns', pretrained=True, margin=margin, is_amp=True)
+                                backbone='tf_efficientnet_b0_ns', pretrained=True, margin=margin, is_amp=True)
     model = SyncBatchNorm.convert_sync_batchnorm(model)
     model.to(device)
     model = DistributedDataParallel(model, device_ids=[gpu])
@@ -108,7 +108,8 @@ def train_function(gpu, world_size, node_rank, gpus):
     # criterion = LabelSmoothLoss(smoothing=0.1)
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
     # scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=end_lr, last_epoch=-1)
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=1, eta_min=end_lr, last_epoch=-1)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=1,
+                                            eta_min=end_lr, last_epoch=-1)
 
     for epoch in range(n_epochs):
         train_loss, train_duration, train_f1 = train_one_epoch(
