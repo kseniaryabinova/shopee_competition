@@ -12,7 +12,7 @@ from torch import optim
 from torch.cuda.amp import GradScaler
 from torch.nn import CrossEntropyLoss, SyncBatchNorm
 from torch.nn.parallel import DistributedDataParallel
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader, DistributedSampler
 import torch.distributed as dist
 
@@ -66,7 +66,7 @@ def train_function(gpu, world_size, node_rank, gpus):
         wandb.config.dropout = dropout
         wandb.config.iters_to_accumulate = iters_to_accumulate
         wandb.config.optimizer = 'adam'
-        wandb.config.scheduler = 'CosineAnnealingLR'
+        wandb.config.scheduler = 'CosineAnnealingWarmRestarts T_0=2000'
 
     df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
     train_df = df[(df['fold_strat'] != 0) & ~(df['fold_strat'].isna())]
@@ -104,18 +104,17 @@ def train_function(gpu, world_size, node_rank, gpus):
     model = DistributedDataParallel(model, device_ids=[gpu])
 
     scaler = GradScaler()
-    # criterion = CrossEntropyLoss()
-    criterion = LabelSmoothLoss(smoothing=0.05)
+    criterion = CrossEntropyLoss()
+    # criterion = LabelSmoothLoss(smoothing=0.1)
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
-    scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=end_lr, last_epoch=-1)
-
-    model.train()
-    optimizer.zero_grad()
+    # scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=end_lr, last_epoch=-1)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=1, eta_min=end_lr, last_epoch=-1)
 
     for epoch in range(n_epochs):
-        train_loss, train_duration, train_f1 = train_one_epoch(model, train_dataloader, optimizer, criterion, device,
-                                                               scaler, iters_to_accumulate=iters_to_accumulate)
-        scheduler.step()
+        train_loss, train_duration, train_f1 = train_one_epoch(
+            model, train_dataloader, optimizer, criterion, device, scaler,
+            scheduler=scheduler, iters_to_accumulate=iters_to_accumulate)
+        # scheduler.step()
 
         if rank == 0:
             valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device)

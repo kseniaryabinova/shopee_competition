@@ -9,7 +9,8 @@ from torch.nn.utils import clip_grad_norm_
 from torch.nn.functional import log_softmax
 
 
-def train_one_epoch(model: nn.Module, dataloader, optimizer, criterion, device, scaler, iters_to_accumulate=1,
+def train_one_epoch(model: nn.Module, dataloader, optimizer, criterion, device,
+                    scaler, scheduler=None, iters_to_accumulate=1,
                     clip_grads=False):
     total_loss = 0
     start_time = time.time()
@@ -36,6 +37,8 @@ def train_one_epoch(model: nn.Module, dataloader, optimizer, criterion, device, 
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
+                if scheduler:
+                    scheduler.step()
 
         prediction = softmax(outputs).cpu().detach().numpy()
         prediction = np.argmax(prediction, axis=1)
