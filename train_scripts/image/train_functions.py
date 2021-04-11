@@ -1,9 +1,14 @@
 import time
 
+from sklearn.metrics import f1_score, pairwise_distances
+from sklearn.neighbors import NearestNeighbors
+
 import numpy as np
+from numpy import dot
+from numpy.linalg import norm
+
 import torch
 from torch import nn
-from sklearn.metrics import f1_score
 from torch.cuda.amp import autocast
 from torch.nn.utils import clip_grad_norm_
 from torch.nn.functional import log_softmax
@@ -101,7 +106,8 @@ def get_embeddings(model: nn.Module, dataloader, device):
             if embeddings is None:
                 embeddings = outputs.cpu().detach().numpy()
             else:
-                embeddings = np.concatenate([embeddings, outputs.cpu().detach().numpy()], axis=0)
+                embeddings = np.concatenate([embeddings, outputs.cpu().detach().numpy()],
+                                            axis=0)
 
     return embeddings
 
@@ -117,3 +123,46 @@ class LabelSmoothLoss(nn.Module):
         weight.scatter_(-1, target.unsqueeze(-1), (1. - self.smoothing))
         loss = (-weight * log_prob).sum(dim=-1).mean()
         return loss
+
+
+def validate_embeddings_f1(embeddings, df):
+    import pandas as pd
+    pd.options.mode.chained_assignment = None
+
+    def get_f1_metric(col):
+        def f1score(row):
+            n = len(np.intersect1d(row.target, row[col]))
+            return 2 * n / (len(row.target) + len(row[col]))
+
+        return f1score
+
+    tmp = df.groupby('label_group').posting_id.agg('unique').to_dict()
+    df['target'] = df.label_group.map(tmp)
+
+    max_f1 = 0
+    for thresh in np.arange(0.5, 0, -0.05):
+        df['predictions'] = validate_with_knn(embeddings, df, thresh)
+        df['f1'] = df.apply(get_f1_metric('predictions'), axis=1)
+        f1_mean = df['f1'].mean()
+
+        if max_f1 < f1_mean:
+            max_f1 = f1_mean
+
+    return max_f1
+
+
+def validate_with_knn(embeddings, df, threshold):
+    knn = NearestNeighbors(n_neighbors=50, metric='precomputed',
+                           algorithm='brute', n_jobs=None)
+    distance_matrix = pairwise_distances(embeddings, metric="cosine")
+    knn.fit(distance_matrix)
+    distances, indices = knn.kneighbors(distance_matrix)
+
+    preds = []
+    for k in range(embeddings.shape[0]):
+        IDX = np.where(distances[k, ] < threshold)[0]
+        IDS = indices[k, IDX]
+        o = df.iloc[IDS].posting_id.values
+        preds.append(o)
+
+    return preds

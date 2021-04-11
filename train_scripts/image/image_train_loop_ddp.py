@@ -4,6 +4,7 @@ import torch
 
 
 import torch.multiprocessing
+import wandb
 
 from image.train_functions_ddp import train_function
 
@@ -21,4 +22,10 @@ os.environ['NCCL_LL_THRESHOLD'] = '0.'
 os.environ['WANDB_SILENT'] = 'true'
 
 if __name__ == '__main__':
-    torch.multiprocessing.spawn(fn=train_function, nprocs=gpus, args=(world_size, node_rank, gpus), join=True)
+    group_name = wandb.util.generate_id()
+
+    for i in range(5):
+        torch.multiprocessing.spawn(
+            fn=train_function, nprocs=gpus,
+            args=(world_size, node_rank, gpus, i, group_name),
+            join=True)

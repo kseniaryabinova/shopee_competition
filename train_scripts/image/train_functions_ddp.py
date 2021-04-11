@@ -20,10 +20,10 @@ import wandb
 
 from dataset import ImageDataset
 from model import EfficientNetArcFace
-from train_functions import train_one_epoch, evaluate, get_embeddings, LabelSmoothLoss
+from train_functions import train_one_epoch, evaluate, get_embeddings, LabelSmoothLoss, validate_embeddings_f1
 
 
-def train_function(gpu, world_size, node_rank, gpus):
+def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
     import torch.multiprocessing
     torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -44,15 +44,14 @@ def train_function(gpu, world_size, node_rank, gpus):
     width_size = 416
     init_lr = 1e-4
     end_lr = 1e-6
-    n_epochs = 40
+    n_epochs = 20
     emb_size = 512
-    margin = 0.5
+    margin = 0.7
     dropout = 0.0
     iters_to_accumulate = 1
 
     if rank == 0:
-        group_name = wandb.util.generate_id()
-        wandb.init(project='shopee_effnet0', group=group_name)
+        wandb.init(project='shopee_effnet0', group=group_name, job_type=str(fold_number))
 
         checkpoints_dir_name = 'effnet0_{}_{}_{}'.format(width_size, dropout, group_name)
         os.makedirs(checkpoints_dir_name, exist_ok=True)
@@ -66,10 +65,10 @@ def train_function(gpu, world_size, node_rank, gpus):
         wandb.config.dropout = dropout
         wandb.config.iters_to_accumulate = iters_to_accumulate
         wandb.config.optimizer = 'adam'
-        wandb.config.scheduler = 'CosineAnnealingWarmRestarts T_0=2000'
+        wandb.config.scheduler = 'CosineAnnealing'
 
     df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
-    train_df = df[(df['fold_strat'] != 0) & ~(df['fold_strat'].isna())]
+    train_df = df[df['fold_strat'] != fold_number]
     train_transforms = alb.Compose([
         alb.RandomResizedCrop(width_size, width_size),
         alb.HorizontalFlip(),
@@ -84,16 +83,16 @@ def train_function(gpu, world_size, node_rank, gpus):
     train_dataloader = DataLoader(train_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4,
                                   sampler=sampler)
 
-    valid_df = df[df['fold_strat'] == 0]
+    # valid_df = df[df['fold_strat'] == fold_number]
     valid_transforms = alb.Compose([
         alb.Resize(width_size, width_size),
         alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ])
-    valid_set = ImageDataset(train_df, valid_df, '../../dataset/train_images', valid_transforms)
-    valid_dataloader = DataLoader(valid_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4)
+    # valid_set = ImageDataset(train_df, valid_df, '../../dataset/train_images', valid_transforms)
+    # valid_dataloader = DataLoader(valid_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4)
 
-    test_df = df[df['fold_group'] == 0]
+    test_df = df[df['fold_group'] == fold_number]
     test_set = ImageDataset(test_df, test_df, '../../dataset/train_images', valid_transforms)
     test_dataloader = DataLoader(test_set, batch_size=batch_size // world_size, shuffle=False, num_workers=4)
 
@@ -107,32 +106,35 @@ def train_function(gpu, world_size, node_rank, gpus):
     criterion = CrossEntropyLoss()
     # criterion = LabelSmoothLoss(smoothing=0.1)
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
-    # scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=end_lr, last_epoch=-1)
-    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=1,
-                                            eta_min=end_lr, last_epoch=-1)
+    scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=end_lr, last_epoch=-1)
+    # scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=1,
+    #                                         eta_min=end_lr, last_epoch=-1)
 
     for epoch in range(n_epochs):
         train_loss, train_duration, train_f1 = train_one_epoch(
             model, train_dataloader, optimizer, criterion, device, scaler,
-            scheduler=scheduler, iters_to_accumulate=iters_to_accumulate)
-        # scheduler.step()
+            scheduler=None, iters_to_accumulate=iters_to_accumulate)
+        scheduler.step()
 
         if rank == 0:
-            valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device)
+            # valid_loss, valid_duration, valid_f1 = evaluate(model, valid_dataloader, criterion, device)
             embeddings = get_embeddings(model, test_dataloader, device)
+            embeddings_f1 = validate_embeddings_f1(embeddings, test_df)
 
             wandb.log({'train_loss': train_loss, 'train_f1': train_f1,
-                       'valid_loss': valid_loss, 'valid_f1': valid_f1, 'epoch': epoch})
+                       'embeddings_f1': embeddings_f1, 'epoch': epoch})
 
-            filename = '{}_epoch{}_train_loss{}_f1{}_valid_loss{}_f1{}'.format(
-                           checkpoints_dir_name, epoch, round(train_loss, 3), round(train_f1, 3),
-                           round(valid_loss, 3), round(valid_f1, 3))
+            filename = '{}_foldnum{}_epoch{}_train_loss{}_f1{}'.format(
+                checkpoints_dir_name, fold_number+1, epoch+1,
+                round(train_loss, 3), round(embeddings_f1, 3))
             torch.save(model.module.state_dict(), os.path.join(checkpoints_dir_name, '{}.pth'.format(filename)))
             np.savez_compressed(os.path.join(checkpoints_dir_name, '{}.npz'.format(filename)), embeddings=embeddings)
 
-            print('EPOCH %d:\tTRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t'
-                  'VALID [duration %.3f sec, loss: %.3f, avg f1: %.3f]\tCurrent time %s' %
-                  (epoch + 1, train_duration, train_loss, train_f1, valid_duration, valid_loss, valid_f1,
+            print('FOLD NUMBER %d\tEPOCH %d:\t'
+                  'TRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t'
+                  'VALID EMBEDDINGS [avg f1: %.3f]\tCurrent time %s' %
+                  (fold_number + 1, epoch + 1, train_duration,
+                   train_loss, train_f1, embeddings_f1,
                    str(datetime.now(timezone('Europe/Moscow')))))
 
     if rank == 0:
