@@ -46,7 +46,7 @@ def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
     end_lr = 1e-6
     n_epochs = 20
     emb_size = 512
-    margin = 0.7
+    margin = 0.5
     dropout = 0.0
     iters_to_accumulate = 1
 
@@ -128,7 +128,7 @@ def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
                 checkpoints_dir_name, fold_number+1, epoch+1,
                 round(train_loss, 3), round(embeddings_f1, 3))
             torch.save(model.module.state_dict(), os.path.join(checkpoints_dir_name, '{}.pth'.format(filename)))
-            np.savez_compressed(os.path.join(checkpoints_dir_name, '{}.npz'.format(filename)), embeddings=embeddings)
+            # np.savez_compressed(os.path.join(checkpoints_dir_name, '{}.npz'.format(filename)), embeddings=embeddings)
 
             print('FOLD NUMBER %d\tEPOCH %d:\t'
                   'TRAIN [duration %.3f sec, loss: %.3f, avg f1: %.3f]\t'
