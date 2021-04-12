@@ -72,9 +72,24 @@ def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
     train_df = df[df['fold_group'] != fold_number]
     train_transforms = alb.Compose([
         alb.RandomResizedCrop(width_size, width_size),
-        alb.HorizontalFlip(),
         alb.ShiftScaleRotate(shift_limit=0.1, rotate_limit=30),
+        alb.HorizontalFlip(),
+        alb.OneOf([
+            alb.Sequential([
+                alb.HueSaturationValue(hue_shift_limit=50),
+                alb.RandomBrightnessContrast(),
+            ]),
+            alb.FancyPCA(),
+            alb.ChannelDropout(),
+            alb.ChannelShuffle(),
+            alb.RGBShift()
+        ]),
         alb.CoarseDropout(max_height=int(width_size*0.1), max_width=int(width_size*0.1)),
+        alb.OneOf([
+            alb.ElasticTransform(),
+            alb.OpticalDistortion(),
+            alb.GridDistortion()
+        ]),
         alb.Resize(width_size, width_size),
         alb.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
