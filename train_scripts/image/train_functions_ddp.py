@@ -20,7 +20,8 @@ import wandb
 
 from dataset import ImageDataset
 from model import EfficientNetArcFace
-from train_functions import train_one_epoch, evaluate, get_embeddings, LabelSmoothLoss, validate_embeddings_f1
+from train_functions import train_one_epoch, evaluate, get_embeddings, LabelSmoothLoss, validate_embeddings_f1, \
+    ShopeeScheduler
 
 
 def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
@@ -65,7 +66,7 @@ def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
         wandb.config.dropout = dropout
         wandb.config.iters_to_accumulate = iters_to_accumulate
         wandb.config.optimizer = 'adam'
-        wandb.config.scheduler = 'CosineAnnealing'
+        wandb.config.scheduler = 'ShopeeScheduler'
 
     df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
     train_df = df[df['fold_group'] != fold_number]
@@ -106,9 +107,12 @@ def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
     criterion = CrossEntropyLoss()
     # criterion = LabelSmoothLoss(smoothing=0.1)
     optimizer = optim.Adam(model.parameters(), lr=init_lr)
-    scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=end_lr, last_epoch=-1)
+    # scheduler = CosineAnnealingLR(optimizer, T_max=n_epochs, eta_min=end_lr,
+    #                               last_epoch=-1)
     # scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=2000, T_mult=1,
     #                                         eta_min=end_lr, last_epoch=-1)
+    scheduler = ShopeeScheduler(optimizer, lr_start=init_lr,
+                                lr_max=init_lr*batch_size, lr_min=end_lr)
 
     for epoch in range(n_epochs):
         train_loss, train_duration, train_f1 = train_one_epoch(
