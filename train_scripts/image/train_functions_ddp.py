@@ -68,7 +68,7 @@ def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
         wandb.config.scheduler = 'CosineAnnealing'
 
     df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
-    train_df = df[df['fold_strat'] != fold_number]
+    train_df = df[df['fold_group'] != fold_number]
     train_transforms = alb.Compose([
         alb.RandomResizedCrop(width_size, width_size),
         alb.HorizontalFlip(),
