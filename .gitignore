@@ -13,4 +13,5 @@ r_env
 *.npz
 embeddings
 *.png
+.DS_Store
 
