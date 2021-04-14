@@ -33,7 +33,7 @@ def get_metric(col):
     return f1score
 
 
-for th in (1, 16):
+for th in range(1, 16):
     df['preds'] = df['image_phash'].parallel_apply(lambda x: get_simular_hashes(x, th))
 
     df['f1'] = df.apply(get_metric('preds'), axis=1)
