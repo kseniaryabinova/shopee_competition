@@ -50,17 +50,17 @@ def get_knn_preds(embeddings, df, thresh):
     return preds
 
 
-string_array = np.array([[int(j) for j in df.loc[i, 'hash_bin']] for i in range(len(df))])
-
-for th in range(1, 64):
-    df['preds'] = get_knn_preds(string_array, df, th)
-
-    df['f1'] = df.apply(get_metric('preds'), axis=1)
-    print(th, df['f1'].mean())
-
-
+# string_array = np.array([[int(j) for j in df.loc[i, 'hash_bin']] for i in range(len(df))])
+#
 # for th in range(1, 64):
-#     df['preds'] = df['hash_bin'].parallel_apply(lambda x: get_simular_hashes(x, th))
+#     df['preds'] = get_knn_preds(string_array, df, th)
 #
 #     df['f1'] = df.apply(get_metric('preds'), axis=1)
 #     print(th, df['f1'].mean())
+
+
+for th in range(1, 64):
+    df['preds'] = df['hash_bin'].parallel_apply(lambda x: get_simular_hashes(x, th))
+
+    df['f1'] = df.apply(get_metric('preds'), axis=1)
+    print(th, df['f1'].mean())
