@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 
 from pandarallel import pandarallel
+from sklearn.neighbors import NearestNeighbors
+
 pandarallel.initialize()
 
 
@@ -33,8 +35,32 @@ def get_metric(col):
     return f1score
 
 
+def get_knn_preds(embeddings, df, thresh):
+    knn = NearestNeighbors(n_neighbors=50, metric='hamming', algorithm='brute', n_jobs=-1)
+    knn.fit(embeddings)
+    distances, indices = knn.kneighbors(embeddings)
+
+    preds = []
+    for k in range(embeddings.shape[0]):
+        IDX = np.where(distances[k, ] < thresh)[0]
+        IDS = indices[k, IDX]
+        o = df.iloc[IDS].posting_id.values
+        preds.append(o)
+
+    return preds
+
+
+string_array = np.array([[int(j) for j in df.loc[i, 'hash_bin']] for i in range(len(df))])
+
 for th in range(1, 64):
-    df['preds'] = df['hash_bin'].parallel_apply(lambda x: get_simular_hashes(x, th))
+    df['preds'] = get_knn_preds(string_array, df, th)
 
     df['f1'] = df.apply(get_metric('preds'), axis=1)
     print(th, df['f1'].mean())
+
+
+# for th in range(1, 64):
+#     df['preds'] = df['hash_bin'].parallel_apply(lambda x: get_simular_hashes(x, th))
+#
+#     df['f1'] = df.apply(get_metric('preds'), axis=1)
+#     print(th, df['f1'].mean())
