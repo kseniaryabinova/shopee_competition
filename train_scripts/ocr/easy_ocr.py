@@ -4,7 +4,7 @@ import cv2
 import easyocr
 
 
-reader = easyocr.Reader(['en'], recog_network='latin_g1') # need to run only once to load model into memory
+reader = easyocr.Reader(['en', 'id'])  # need to run only once to load model into memory
 
 image_paths = '/home/ksenia/progas/kaggle/shopee/dataset/train_images/*'
 
@@ -18,7 +18,9 @@ for image_path in glob.iglob(image_paths):
         x2 = int(max(bbox[0][0], bbox[1][0], bbox[2][0], bbox[3][0]))
         y2 = int(max(bbox[0][1], bbox[1][1], bbox[2][1], bbox[3][1]))
         cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), thickness=2)
-        cv2.putText(image, text, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+        result_text = '{} {}'.format(round(prob, 2), text)
+        cv2.putText(image, result_text, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, (255, 0, 0), 1, cv2.LINE_AA)
 
     cv2.imshow('1', image)
     if cv2.waitKey(0) == 27:
