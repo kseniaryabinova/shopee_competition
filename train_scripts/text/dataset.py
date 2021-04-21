@@ -6,17 +6,17 @@ from transformers import BertTokenizer
 
 
 class TextDataset(Dataset):
-    def __init__(self, full_df, df, bert_name='bert-base-multilingual-cased'):
+    def __init__(self, full_df, df, bert_name='bert-base-multilingual-cased', max_len=128):
         self.df = df
         self.classes = full_df['label_group'].unique().tolist()
 
         self.input_ids = []
         self.attention_mask = []
 
-        tokenizer = BertTokenizer.from_pretrained(bert_name, max_position_embeddings=128)
+        tokenizer = BertTokenizer.from_pretrained(bert_name, max_position_embeddings=max_len)
         for text in self.df['title']:
             text = re.sub(r"\\x..", r"", text)
-            encoding = tokenizer(text, return_tensors='pt', padding='max_length', max_length=128, truncation=True)
+            encoding = tokenizer(text, return_tensors='pt', padding='max_length', max_length=max_len, truncation=True)
             self.input_ids.append(encoding['input_ids'].squeeze())
             self.attention_mask.append(encoding['attention_mask'].squeeze())
 
