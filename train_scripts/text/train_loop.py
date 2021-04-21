@@ -1,6 +1,6 @@
 import pandas as pd
 
-from transformers import BertForSequenceClassification, Trainer, TrainingArguments, AdamW
+from transformers import BertForSequenceClassification, Trainer, TrainingArguments, AdamW, BertConfig
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 import torch
@@ -14,6 +14,7 @@ valid_dataset = TextDataset(df, df[df['fold_group'] == 0])
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+configuration = BertConfig(max_position_embeddings=128)
 model = BertForSequenceClassification.from_pretrained(
     "bert-base-multilingual-cased", num_labels=df['label_group'].nunique())
 model.to(device)
