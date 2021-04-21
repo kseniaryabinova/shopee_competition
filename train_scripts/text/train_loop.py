@@ -30,7 +30,9 @@ optimizer = AdamW(optimizer_grouped_parameters, lr=1e-5)
 for epoch in range(3):
     for input_ids, attention_masks, labels in train_dataloader:
         optimizer.zero_grad()
-        outputs = model(input_ids.to(device), attention_mask=attention_masks.to(device), labels=labels.to(device))
+        outputs = model(input_ids=input_ids.to(device),
+                        attention_mask=attention_masks.to(device),
+                        labels=labels.to(device))
         loss = outputs.loss
         loss.backward()
         optimizer.step()

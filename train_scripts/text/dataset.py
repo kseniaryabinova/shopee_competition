@@ -13,12 +13,12 @@ class TextDataset(Dataset):
         self.input_ids = []
         self.attention_mask = []
 
-        tokenizer = BertTokenizer.from_pretrained(bert_name, max_length=128, padding=128)
+        tokenizer = BertTokenizer.from_pretrained(bert_name, max_position_embeddings=128)
         for text in self.df['title']:
             text = re.sub(r"\\x..", r"", text)
-            encoding = tokenizer(text, return_tensors='pt', padding='max_length', truncation=True)
-            self.input_ids.append(encoding['input_ids'])
-            self.attention_mask.append(encoding['attention_mask'])
+            encoding = tokenizer(text, return_tensors='pt', padding='max_length', max_length=128, truncation=True)
+            self.input_ids.append(encoding['input_ids'].squeeze())
+            self.attention_mask.append(encoding['attention_mask'].squeeze())
 
     def __len__(self):
         return len(self.df)
@@ -28,15 +28,11 @@ class TextDataset(Dataset):
         return self.input_ids[index], self.attention_mask[index], label
 
 
-def collate_fn(data):
-    pass
-
-
 if __name__ == '__main__':
     import pandas as pd
 
     df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
     dataset = TextDataset(df, df[df['fold_group'] != 0])
-    dataloader = DataLoader(dataset=dataset, batch_size=16, shuffle=True, num_workers=0, collate_fn=collate_fn)
+    dataloader = DataLoader(dataset=dataset, batch_size=16, shuffle=True, num_workers=0)
     for input_ids, attention_masks, labels in dataloader:
         pass
