@@ -37,7 +37,6 @@ def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
 
     if rank == 0:
         wandb.init(project='shopee_effnet0', group=group_name, job_type=str(fold_number))
-
         wandb.config.batch_size = batch_size
         wandb.config.n_epochs = n_epochs
         wandb.config.max_len = max_len

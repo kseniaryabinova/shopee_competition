@@ -62,6 +62,6 @@ for epoch in range(3):
 
     if train_loss > best_loss:
         best_loss = train_loss
-        torch.save(model.module.state_dict(), 'best_bt.pth')
+        torch.save(model.state_dict(), 'best_bt.pth')
 
 wandb.finish()
