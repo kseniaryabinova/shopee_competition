@@ -17,7 +17,6 @@ def train_one_epoch(model, train_dataloader, optimizer, accelerator, device):
                         attention_mask=attention_masks,
                         labels=labels)
         loss = outputs.loss
-        loss.backward()
         accelerator.backward(loss)
         optimizer.step()
 

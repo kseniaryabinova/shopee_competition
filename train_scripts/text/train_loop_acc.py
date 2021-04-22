@@ -16,7 +16,7 @@ from text.train_functions import train_one_epoch
 
 os.environ['WANDB_SILENT'] = 'true'
 
-batch_size = 20
+batch_size = 4
 n_epochs = 20
 max_len = 128
 weight_decay = 0.01
