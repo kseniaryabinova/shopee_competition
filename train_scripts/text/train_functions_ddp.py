@@ -1,8 +1,10 @@
+import os
 import numpy as np
 import pandas as pd
 from torch.nn.parallel import DistributedDataParallel
 
-from transformers import BertForSequenceClassification, Trainer, TrainingArguments, AdamW, BertConfig
+from transformers import BertForSequenceClassification, Trainer, TrainingArguments, \
+    AdamW, BertConfig
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, DistributedSampler
 import torch.distributed as dist
@@ -15,6 +17,8 @@ from text.train_functions import train_one_epoch
 
 
 def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
+
     import torch.multiprocessing
     torch.multiprocessing.set_sharing_strategy('file_system')
 
@@ -46,15 +50,17 @@ def train_function(gpu, world_size, node_rank, gpus, fold_number, group_name):
     df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
     train_dataset = TextDataset(df, df[df['fold_group'] != fold_number], max_len=max_len)
     sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True)
-    train_dataloader = DataLoader(train_dataset, batch_size=batch_size // world_size, shuffle=False, num_workers=4,
-                                  sampler=sampler)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size // world_size,
+                                  shuffle=False, num_workers=4, sampler=sampler)
     valid_dataset = TextDataset(df, df[df['fold_group'] == fold_number], max_len=max_len)
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     model = BertForSequenceClassification.from_pretrained(
         "bert-base-multilingual-cased", num_labels=df['label_group'].nunique())
     model.to(device)
-    model = DistributedDataParallel(model, device_ids=[gpu], find_unused_parameters=True, output_device=gpu)
+    model = DistributedDataParallel(model, device_ids=[gpu],
+                                    find_unused_parameters=True,
+                                    output_device=gpu)
     model.train()
 
     no_decay = ['bias', 'LayerNorm.weight']
