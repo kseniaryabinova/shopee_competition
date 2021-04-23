@@ -59,7 +59,7 @@ model, optimizer, train_dataloader = accelerator.prepare(model, optimizer, train
 
 best_loss = 0
 
-for epoch in range(3):
+for epoch in range(n_epochs):
     train_loss = train_one_epoch(model, train_dataloader, optimizer, accelerator, device)
 
     wandb.log({'train_loss': train_loss, 'epoch': epoch})
