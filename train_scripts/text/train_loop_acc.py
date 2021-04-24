@@ -3,11 +3,15 @@ import os
 import pandas as pd
 import wandb
 from accelerate import Accelerator
+from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 from transformers import BertForSequenceClassification, AdamW, BertConfig
 
 from text.dataset import TextDataset
-from text.train_functions import train_one_epoch_acc
+from text.model import BERTWithArcFace
+from text.train_functions import train_one_epoch_acc, seed_everything, train_one_epoch_arc_bert
+
+seed_everything(seed=25)
 
 os.environ['WANDB_SILENT'] = 'true'
 
@@ -31,31 +35,54 @@ if accelerator.is_main_process:
 
 df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
 train_dataset = TextDataset(df[df['fold_group'] != 0], max_len=max_len)
-train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+train_dataloader = DataLoader(
+    dataset=train_dataset,
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=0
+)
 valid_dataset = TextDataset(df[df['fold_group'] == 0], max_len=max_len)
 
 configuration = BertConfig(max_position_embeddings=max_len)
-model = BertForSequenceClassification.from_pretrained(
-    # max_position_embeddings=max_len,
-    pretrained_model_name_or_path="bert-base-multilingual-cased",
-    num_labels=df[df['fold_group'] != 0]['label_group'].nunique()
+# model = BertForSequenceClassification.from_pretrained(
+#     pretrained_model_name_or_path="bert-base-multilingual-cased",
+#     num_labels=df[df['fold_group'] != 0]['label_group'].nunique()
+# )
+model = BERTWithArcFace(
+    labels_num=df[df['fold_group'] != 0]['label_group'].nunique(),
+    emb_size=512,
+    dropout=0.0
 )
 
 no_decay = ['bias', 'LayerNorm.weight']
 optimizer_grouped_parameters = [
-    {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+    {'params': [p for n, p in model.named_parameters()
+                if not any(nd in n for nd in no_decay)],
      'weight_decay': weight_decay},
-    {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+    {'params': [p for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)],
      'weight_decay': 0.0}
 ]
 optimizer = AdamW(optimizer_grouped_parameters, lr=init_lr)
+criterion = CrossEntropyLoss()
 
-model, optimizer, train_dataloader = accelerator.prepare(model, optimizer, train_dataloader)
+model, optimizer, train_dataloader = accelerator.prepare(
+    model,
+    optimizer,
+    train_dataloader
+)
 
 best_loss = 0
 
 for epoch in range(n_epochs):
-    train_loss = train_one_epoch_acc(model, train_dataloader, optimizer, accelerator)
+    # train_loss = train_one_epoch_acc(model, train_dataloader, optimizer, accelerator)
+    train_loss = train_one_epoch_arc_bert(
+        model,
+        train_dataloader,
+        criterion,
+        optimizer,
+        accelerator
+    )
 
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
@@ -63,6 +90,8 @@ for epoch in range(n_epochs):
         if train_loss > best_loss:
             best_loss = train_loss
             accelerator.unwrap_model(model).save_pretrained('bt_vanilla')
+            accelerator.save(accelerator.unwrap_model(model).state_dict(),
+                             'best_bt_af.pth')
 
 if accelerator.is_main_process:
     wandb.finish()
