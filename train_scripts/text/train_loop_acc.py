@@ -11,8 +11,7 @@ from accelerate import Accelerator
 import wandb
 
 from text.dataset import TextDataset
-from text.train_functions import train_one_epoch
-
+from text.train_functions import train_one_epoch_acc
 
 os.environ['WANDB_SILENT'] = 'true'
 
@@ -28,7 +27,6 @@ accelerator = Accelerator()
 if accelerator.is_main_process:
     group_name = wandb.util.generate_id()
     wandb.init(project='bert_base', group=group_name, job_type=str(fold_number))
-
     wandb.config.batch_size = batch_size
     wandb.config.n_epochs = n_epochs
     wandb.config.max_len = max_len
@@ -40,12 +38,9 @@ train_dataset = TextDataset(df, df[df['fold_group'] != 0], max_len=max_len)
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 valid_dataset = TextDataset(df, df[df['fold_group'] == 0], max_len=max_len)
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-
 configuration = BertConfig(max_position_embeddings=max_len)
 model = BertForSequenceClassification.from_pretrained(
-    "bert-base-multilingual-cased", num_labels=df['label_group'].nunique())
+    "bert-base-multilingual-cased", num_labels=df[df['fold_group'] != 0]['label_group'].nunique())
 
 no_decay = ['bias', 'LayerNorm.weight']
 optimizer_grouped_parameters = [
@@ -61,15 +56,14 @@ model, optimizer, train_dataloader = accelerator.prepare(model, optimizer, train
 best_loss = 0
 
 for epoch in range(n_epochs):
-    train_loss = train_one_epoch(model, train_dataloader, optimizer, accelerator, device)
+    train_loss = train_one_epoch_acc(model, train_dataloader, optimizer, accelerator)
 
     accelerator.wait_for_everyone()
-
     if accelerator.is_main_process:
         wandb.log({'train_loss': train_loss, 'epoch': epoch})
-    if train_loss > best_loss:
-        best_loss = train_loss
-        accelerator.save(accelerator.unwrap_model(model).state_dict(), 'best_bt.pth')
+        if train_loss > best_loss:
+            best_loss = train_loss
+            accelerator.save(accelerator.unwrap_model(model).state_dict(), 'best_bt.pth')
 
 if accelerator.is_main_process:
     wandb.finish()
