@@ -89,7 +89,7 @@ for epoch in range(n_epochs):
         wandb.log({'train_loss': train_loss, 'epoch': epoch})
         if train_loss > best_loss:
             best_loss = train_loss
-            accelerator.unwrap_model(model).save_pretrained('bt_vanilla')
+            # accelerator.unwrap_model(model).save_pretrained('bt_vanilla')
             accelerator.save(accelerator.unwrap_model(model).state_dict(),
                              'best_bt_af.pth')
 
