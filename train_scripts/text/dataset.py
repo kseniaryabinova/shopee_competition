@@ -6,9 +6,9 @@ from transformers import BertTokenizer
 
 
 class TextDataset(Dataset):
-    def __init__(self, full_df, df, bert_name='bert-base-multilingual-cased', max_len=128):
+    def __init__(self, df, bert_name='bert-base-multilingual-cased', max_len=128):
         self.df = df
-        self.classes = full_df['label_group'].unique().tolist()
+        self.classes = df['label_group'].unique().tolist()
 
         self.input_ids = []
         self.attention_mask = []

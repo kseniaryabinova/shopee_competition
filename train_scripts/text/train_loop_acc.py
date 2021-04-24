@@ -1,14 +1,10 @@
 import os
 
 import pandas as pd
-
-from transformers import BertForSequenceClassification, Trainer, TrainingArguments, AdamW, BertConfig
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
-import torch
-from accelerate import Accelerator
-
 import wandb
+from accelerate import Accelerator
+from torch.utils.data import DataLoader
+from transformers import BertForSequenceClassification, AdamW, BertConfig
 
 from text.dataset import TextDataset
 from text.train_functions import train_one_epoch_acc
@@ -34,13 +30,16 @@ if accelerator.is_main_process:
     wandb.config.init_lr = init_lr
 
 df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
-train_dataset = TextDataset(df, df[df['fold_group'] != 0], max_len=max_len)
+train_dataset = TextDataset(df[df['fold_group'] != 0], max_len=max_len)
 train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-valid_dataset = TextDataset(df, df[df['fold_group'] == 0], max_len=max_len)
+valid_dataset = TextDataset(df[df['fold_group'] == 0], max_len=max_len)
 
 configuration = BertConfig(max_position_embeddings=max_len)
 model = BertForSequenceClassification.from_pretrained(
-    "bert-base-multilingual-cased", num_labels=df[df['fold_group'] != 0]['label_group'].nunique())
+    # max_position_embeddings=max_len,
+    pretrained_model_name_or_path="bert-base-multilingual-cased",
+    num_labels=df[df['fold_group'] != 0]['label_group'].nunique()
+)
 
 no_decay = ['bias', 'LayerNorm.weight']
 optimizer_grouped_parameters = [
@@ -63,7 +62,7 @@ for epoch in range(n_epochs):
         wandb.log({'train_loss': train_loss, 'epoch': epoch})
         if train_loss > best_loss:
             best_loss = train_loss
-            accelerator.save(accelerator.unwrap_model(model).state_dict(), 'best_bt.pth')
+            accelerator.unwrap_model(model).save_pretrained('bt_vanilla')
 
 if accelerator.is_main_process:
     wandb.finish()
