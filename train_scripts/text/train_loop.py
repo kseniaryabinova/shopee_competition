@@ -33,7 +33,8 @@ wandb.config.init_lr = init_lr
 
 df = pd.read_csv('../../dataset/reliable_validation_tm.csv')
 train_dataset = TextDataset(df, df[df['fold_group'] != 0], max_len=max_len)
-train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size,
+                              shuffle=True, num_workers=0)
 valid_dataset = TextDataset(df, df[df['fold_group'] == 0], max_len=max_len)
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -46,9 +47,11 @@ model.train()
 
 no_decay = ['bias', 'LayerNorm.weight']
 optimizer_grouped_parameters = [
-    {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+    {'params': [p for n, p in model.named_parameters()
+                if not any(nd in n for nd in no_decay)],
      'weight_decay': weight_decay},
-    {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+    {'params': [p for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)],
      'weight_decay': 0.0}
 ]
 optimizer = AdamW(optimizer_grouped_parameters, lr=init_lr)
