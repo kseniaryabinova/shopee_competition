@@ -128,4 +128,6 @@ class BERTWithArcFace(torch.nn.Module):
 
 
 if __name__ == '__main__':
-    model = BERTWithArcFace(10)
+    model = BERTWithArcFace(8811)
+    model.load_state_dict(torch.load('best_bt_af.pth'))
+

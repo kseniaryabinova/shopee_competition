@@ -9,7 +9,8 @@ from transformers import BertForSequenceClassification, AdamW, BertConfig
 
 from text.dataset import TextDataset
 from text.model import BERTWithArcFace
-from text.train_functions import train_one_epoch_acc, seed_everything, train_one_epoch_arc_bert
+from text.train_functions import train_one_epoch_acc, seed_everything, \
+    train_one_epoch_arc_bert
 
 seed_everything(seed=25)
 
