@@ -15,6 +15,7 @@ class TextDataset(Dataset):
 
         tokenizer = BertTokenizer.from_pretrained(bert_name, max_position_embeddings=max_len)
         for text in self.df['title']:
+            text = text.lower()
             text = re.sub(r"\\x..", r"", text)
             encoding = tokenizer(text, return_tensors='pt', padding='max_length', max_length=max_len, truncation=True)
             self.input_ids.append(encoding['input_ids'].squeeze())

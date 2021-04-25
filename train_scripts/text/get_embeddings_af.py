@@ -1,8 +1,6 @@
 import pandas as pd
 from torch.utils.data import DataLoader
 
-from transformers import BertForSequenceClassification, Trainer,\
-    TrainingArguments, AdamW, BertConfig, BertModel
 import torch
 
 from text.dataset import TextDataset

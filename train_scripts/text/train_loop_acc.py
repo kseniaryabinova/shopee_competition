@@ -28,6 +28,7 @@ accelerator = Accelerator()
 if accelerator.is_main_process:
     group_name = wandb.util.generate_id()
     wandb.init(project='bert_base', group=group_name, job_type=str(fold_number))
+    wandb.config.model_name = 'bert-base-multilingual-cased'
     wandb.config.batch_size = batch_size
     wandb.config.n_epochs = n_epochs
     wandb.config.max_len = max_len
@@ -92,7 +93,7 @@ for epoch in range(n_epochs):
             best_loss = train_loss
             # accelerator.unwrap_model(model).save_pretrained('bt_vanilla')
             accelerator.save(accelerator.unwrap_model(model).state_dict(),
-                             'best_bt_af.pth')
+                             'best_bt_af_uncased.pth')
 
 if accelerator.is_main_process:
     wandb.finish()
