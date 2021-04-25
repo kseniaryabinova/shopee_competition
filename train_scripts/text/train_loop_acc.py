@@ -97,6 +97,7 @@ for epoch in range(n_epochs):
         embeddings = get_embeddings(model, valid_dataloader, accelerator.device)
         f1, thresh = validate_embeddings_f1(embeddings, df[df['fold_group'] == 0])
 
+
         wandb.log({
             'train_loss': train_loss,
             'f1': f1,
