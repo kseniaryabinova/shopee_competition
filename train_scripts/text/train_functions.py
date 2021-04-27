@@ -62,7 +62,7 @@ def train_one_epoch_arc_bert(
     total_loss = 0
     iter_counter = 0
 
-    for input_ids, attention_masks, labels in train_dataloader:
+    for input_ids, attention_masks, labels, _ in train_dataloader:
         optimizer.zero_grad()
         outputs = model(input_ids=input_ids,
                         attention_mask=attention_masks,
@@ -88,13 +88,39 @@ def seed_everything(seed=25):
     torch.backends.cudnn.benchmark = False
 
 
-def get_embeddings(model, dataloader, device):
+def get_embeddings(model, dataloader, accelerator):
+    model.eval()
+    model.float()
+    embeddings = None
+    indices_array = None
+
+    with torch.no_grad():
+        for input_ids, attention_masks, _, indices in dataloader:
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_masks,
+            )
+
+            if embeddings is None:
+                embeddings = accelerator.gather(outputs).cpu().detach().numpy()
+                indices_array = accelerator.gather(indices).cpu().detach().numpy()
+            else:
+                embs = accelerator.gather(outputs).cpu().detach().numpy()
+                inds = accelerator.gather(indices).cpu().detach().numpy()
+                embeddings = np.concatenate([embeddings, embs], axis=0)
+                indices_array = np.concatenate([indices_array, inds], axis=0)
+                print(embeddings.shape, indices_array.shape)
+
+    return embeddings[indices_array]
+
+
+def get_embeddings_with_device(model, dataloader, device):
     model.eval()
     model.float()
     embeddings = None
 
     with torch.no_grad():
-        for input_ids, attention_masks, _ in dataloader:
+        for input_ids, attention_masks, _, indices in dataloader:
             outputs = model(
                 input_ids=input_ids.to(device),
                 attention_mask=attention_masks.to(device),
@@ -104,8 +130,9 @@ def get_embeddings(model, dataloader, device):
                 embeddings = outputs.cpu().detach().numpy()
             else:
                 embeddings = np.concatenate([
-                    embeddings, outputs.cpu().detach().numpy()],
-                    axis=0)
+                    embeddings,
+                    outputs.cpu().detach().numpy()
+                ], axis=0)
 
     return embeddings
 
@@ -144,6 +171,8 @@ def validate_with_knn(embeddings, df, threshold):
     distance_matrix = pairwise_distances(embeddings, metric="cosine")
     knn.fit(distance_matrix)
     distances, indices = knn.kneighbors(distance_matrix)
+
+    print(embeddings.shape, df.shape, distances.shape, indices.shape)
 
     preds = []
     for k in range(embeddings.shape[0]):

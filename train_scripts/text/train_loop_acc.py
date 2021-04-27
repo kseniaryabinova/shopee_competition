@@ -10,7 +10,7 @@ from transformers import BertForSequenceClassification, AdamW, BertConfig
 from text.dataset import TextDataset
 from text.model import BERTWithArcFace
 from text.train_functions import train_one_epoch_acc, seed_everything, \
-    train_one_epoch_arc_bert, get_embeddings, validate_embeddings_f1
+    train_one_epoch_arc_bert, get_embeddings, validate_embeddings_f1, get_embeddings_with_device
 
 seed_everything(seed=25)
 
@@ -83,7 +83,7 @@ model, optimizer, train_dataloader = accelerator.prepare(
 best_loss = 0
 
 for epoch in range(n_epochs):
-    # train_loss = train_one_epoch_acc(model, train_dataloader, optimizer, accelerator)
+    train_loss = train_one_epoch_acc(model, train_dataloader, optimizer, accelerator)
     train_loss = train_one_epoch_arc_bert(
         model,
         train_dataloader,
@@ -94,9 +94,10 @@ for epoch in range(n_epochs):
 
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
-        embeddings = get_embeddings(model, valid_dataloader, accelerator.device)
+        embeddings = get_embeddings_with_device(
+            model, valid_dataloader, accelerator.device)
         f1, thresh = validate_embeddings_f1(embeddings, df[df['fold_group'] == 0])
-
+        print(f1, thresh)
 
         wandb.log({
             'train_loss': train_loss,
@@ -109,6 +110,8 @@ for epoch in range(n_epochs):
             # accelerator.unwrap_model(model).save_pretrained('bt_vanilla')
             accelerator.save(accelerator.unwrap_model(model).state_dict(),
                              'best_bt_af_cased.pth')
+
+    accelerator.wait_for_everyone()
 
 if accelerator.is_main_process:
     wandb.finish()

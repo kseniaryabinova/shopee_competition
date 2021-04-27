@@ -26,7 +26,7 @@ class TextDataset(Dataset):
 
     def __getitem__(self, index):
         label = self.classes.index(self.df.iloc[index]['label_group'])
-        return self.input_ids[index], self.attention_mask[index], label
+        return self.input_ids[index], self.attention_mask[index], label, index
 
 
 if __name__ == '__main__':
