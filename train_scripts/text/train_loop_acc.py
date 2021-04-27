@@ -74,16 +74,17 @@ optimizer_grouped_parameters = [
 optimizer = AdamW(optimizer_grouped_parameters, lr=init_lr)
 criterion = CrossEntropyLoss()
 
-model, optimizer, train_dataloader = accelerator.prepare(
+model, optimizer, train_dataloader, valid_dataloader = accelerator.prepare(
     model,
     optimizer,
-    train_dataloader
+    train_dataloader,
+    valid_dataloader
 )
 
 best_loss = 0
 
 for epoch in range(n_epochs):
-    train_loss = train_one_epoch_acc(model, train_dataloader, optimizer, accelerator)
+    # train_loss = train_one_epoch_acc(model, train_dataloader, optimizer, accelerator)
     train_loss = train_one_epoch_arc_bert(
         model,
         train_dataloader,
@@ -91,12 +92,17 @@ for epoch in range(n_epochs):
         optimizer,
         accelerator
     )
+    embeddings = get_embeddings(
+        model,
+        valid_dataloader,
+        len(df[df['fold_group'] == 0]),
+        accelerator
+    )
 
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
-        embeddings = get_embeddings_with_device(
-            model, valid_dataloader, accelerator.device)
-        f1, thresh = validate_embeddings_f1(embeddings, df[df['fold_group'] == 0])
+        f1, thresh = validate_embeddings_f1(
+            embeddings, df[df['fold_group'] == 0])
         print(f1, thresh)
 
         wandb.log({

@@ -88,7 +88,7 @@ def seed_everything(seed=25):
     torch.backends.cudnn.benchmark = False
 
 
-def get_embeddings(model, dataloader, accelerator):
+def get_embeddings(model, dataloader, df_len, accelerator):
     model.eval()
     model.float()
     embeddings = None
@@ -109,9 +109,10 @@ def get_embeddings(model, dataloader, accelerator):
                 inds = accelerator.gather(indices).cpu().detach().numpy()
                 embeddings = np.concatenate([embeddings, embs], axis=0)
                 indices_array = np.concatenate([indices_array, inds], axis=0)
-                print(embeddings.shape, indices_array.shape)
 
-    return embeddings[indices_array]
+    embeddings = embeddings[indices_array]
+    embeddings = embeddings[:df_len]
+    return embeddings
 
 
 def get_embeddings_with_device(model, dataloader, device):
@@ -171,8 +172,6 @@ def validate_with_knn(embeddings, df, threshold):
     distance_matrix = pairwise_distances(embeddings, metric="cosine")
     knn.fit(distance_matrix)
     distances, indices = knn.kneighbors(distance_matrix)
-
-    print(embeddings.shape, df.shape, distances.shape, indices.shape)
 
     preds = []
     for k in range(embeddings.shape[0]):
