@@ -19,7 +19,7 @@ os.environ['WANDB_SILENT'] = 'true'
 batch_size = 16
 n_epochs = 20
 max_len = 128
-weight_decay = 0.01
+weight_decay = 0
 init_lr = 1e-5
 fold_number = 0
 
@@ -115,7 +115,7 @@ for epoch in range(n_epochs):
             best_loss = train_loss
             # accelerator.unwrap_model(model).save_pretrained('bt_vanilla')
             accelerator.save(accelerator.unwrap_model(model).state_dict(),
-                             'best_bt_af_cased.pth')
+                             'best_bt_af_cased_nowd.pth')
 
     accelerator.wait_for_everyone()
 
